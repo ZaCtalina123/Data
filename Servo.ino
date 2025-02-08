@@ -4,6 +4,10 @@
 Servo servoX; // Серво для оси X
 Servo servoY; // Серво для оси Y
 
+const int numRows = 5; // Количество строк
+const int numCols = 5; // Количество столбцов
+const int stepSize = 36; // Шаг в градусах между точками (180° / 5 = 36°)
+
 void setup() {
  servoX.attach(9); // Подключаем первый сервопривод к пину 9 (ось X)
  servoY.attach(10); // Подключаем второй сервопривод к пину 10 (ось Y)
@@ -14,22 +18,23 @@ void setup() {
  delay(1000); // Ждем 1 секунду, чтобы сервоприводы успели переместиться
 }
 
-void drawX() {
- // X() {
- // Рисуем X
- for (int pos = 0; pos <= 180; pos += 10) {
- servoX.write(pos); // Двигаем по оси X
- servoY.write(pos); // Двигаем по оси Y в соответствии с текущей позицией X
+void drawMatrix() {
+ for (int row = 0; row < numRows; row++) ws; row++) {
+ for (int col = 0; col < numCols; col++) {
+ // Перемещаем серво по X и Y
+ int xPosition = col * stepSize; // Угол для оси X
+ int yPosition = row * stepSize; // Угол для оси Y
+
+ servoX.write(xPosition); // Двигаем по оси X
+ servoY.write(yPosition); // Двигаем по оси Y
  delay(500); // Ждем, пока сервоприводы достигнут угла
+
+ // Здесь можно добавить код для "подсветки" точки, если это необходимо
  }
- for (int pos = 180; pos >= 0; pos -= 10) {
- servoX.write(pos); // Двигаем по оси X
- servoY.write(180 • pos); // Двигаем по оси Y в обратном направлении
- delay(500); // Ждем, пока сервоприводы достигнут угла
  }
 }
 
 void loop() {
- drawX(); // Рисуем X
+ drawMatrix(); // Рисуем матрицу
  while (true); // Останавливаем выполнение программы после рисования
 }
