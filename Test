@@ -8,19 +8,22 @@ const int UP_BUTTON = 2;
 const int DOWN_BUTTON = 3;
 const char PLAYER_CHAR = 'O';
 const char CACTUS_CHAR = '#';
-const unsigned long FRAME_TIME = 1000 / 60; // 60 FPS (16.66 мс на кадр)
+const unsigned long BASE_FRAME_TIME = 1000 / 60; // Базовый FPS
 
 // Переменные игры
-int playerPos = 0; // 0 - верхняя строка, 1 - нижняя
+int playerPos = 0;
 int score = 0;
-int gameSpeed = 20; // Начальная скорость (меньше = быстрее)
-int minSpeed = 8;   // Минимальная скорость
+int gameSpeed = 1; // Скорость движения кактусов (1 - медленно, больше - быстрее)
+int spawnRate = 20; // Частота спавна (чем меньше, тем чаще)
+int minSpawnRate = 5;
 int cactusLength = 1;
 bool gameOver = false;
 unsigned long lastMoveTime = 0;
-const long moveDelay = 300; // Задержка между переключениями рядов
+const long moveDelay = 300;
+unsigned long lastCactusMoveTime = 0;
+int moveInterval = 300; // Начальный интервал движения кактусов (мс)
 
-// Массив для хранения кактусов (0-15 позиции, 0-1 строки)
+// Массив для хранения кактусов
 bool cacti[2][16] = {false};
 
 void setup() {
@@ -31,6 +34,40 @@ void setup() {
   lcd.backlight();
   randomSeed(analogRead(0));
   
+  showStartScreen();
+}
+
+void loop() {
+  if (gameOver) {
+    showGameOver();
+    return;
+  }
+  
+  handleInput();
+  
+  unsigned long currentTime = millis();
+  
+  // Движение кактусов с изменяющейся скоростью
+  if (currentTime - lastCactusMoveTime > moveInterval) {
+    moveCacti();
+    lastCactusMoveTime = currentTime;
+  }
+  
+  // Спавн кактусов
+  static int framesSinceLastCactus = 0;
+  if (++framesSinceLastCactus >= spawnRate) {
+    generateCactus();
+    framesSinceLastCactus = 0;
+  }
+  
+  checkCollisions();
+  drawGame();
+  
+  // Ограничение FPS
+  delay(BASE_FRAME_TIME);
+}
+
+void showStartScreen() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Cactus Dodger!");
@@ -44,43 +81,19 @@ void setup() {
   lcd.clear();
 }
 
-void loop() {
-  if (gameOver) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Game Over!");
-    lcd.setCursor(0, 1);
-    lcd.print("Score: ");
-    lcd.print(score);
-    
-    while (digitalRead(UP_BUTTON) && digitalRead(DOWN_BUTTON)) {
-      delay(10);
-    }
-    
-    resetGame();
-    return;
+void showGameOver() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Game Over!");
+  lcd.setCursor(0, 1);
+  lcd.print("Score: ");
+  lcd.print(score);
+  
+  while (digitalRead(UP_BUTTON) && digitalRead(DOWN_BUTTON)) {
+    delay(10);
   }
   
-  static unsigned long lastFrameTime = 0;
-  static int framesSinceLastCactus = 0;
-  
-  unsigned long currentTime = millis();
-  if (currentTime - lastFrameTime < FRAME_TIME) {
-    delay(1);
-    return;
-  }
-  lastFrameTime = currentTime;
-  
-  handleInput();
-  
-  if (++framesSinceLastCactus >= gameSpeed) {
-    generateCactus();
-    framesSinceLastCactus = 0;
-  }
-  
-  moveCacti();
-  checkCollisions();
-  drawGame();
+  resetGame();
 }
 
 void handleInput() {
@@ -98,12 +111,9 @@ void handleInput() {
 }
 
 void generateCactus() {
-  // 80% шанс спавна кактуса
   if (random(10) < 2) return;
   
   cactusLength = random(1, 4);
-  
-  // Спавним только в ряду, где находится игрок
   spawnCactusOnRow(playerPos);
 }
 
@@ -139,23 +149,28 @@ void checkCollisions() {
     gameOver = true;
   }
   
-  // Увеличиваем счет за каждый кадр выживания
   score++;
   
   // Увеличиваем сложность
-  if (score % 100 == 0 && gameSpeed > minSpeed) {
-    gameSpeed--;
+  if (score % 50 == 0) {
+    // Увеличиваем частоту спавна
+    if (spawnRate > minSpawnRate) {
+      spawnRate--;
+    }
+    
+    // Увеличиваем скорость движения кактусов
+    if (moveInterval > 100) { // Минимальный интервал 100мс
+      moveInterval -= 10;
+    }
   }
 }
 
 void drawGame() {
   lcd.clear();
   
-  // Рисуем игрока
   lcd.setCursor(2, playerPos);
   lcd.print(PLAYER_CHAR);
   
-  // Рисуем кактусы
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
       if (cacti[row][col]) {
@@ -165,7 +180,6 @@ void drawGame() {
     }
   }
   
-  // Рисуем счет
   lcd.setCursor(12, 0);
   lcd.print(score);
 }
@@ -173,9 +187,11 @@ void drawGame() {
 void resetGame() {
   playerPos = 0;
   score = 0;
-  gameSpeed = 20;
+  spawnRate = 20;
+  moveInterval = 300;
   gameOver = false;
   lastMoveTime = 0;
+  lastCactusMoveTime = 0;
   
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
