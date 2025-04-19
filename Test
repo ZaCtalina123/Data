@@ -13,33 +13,29 @@ const unsigned long FRAME_TIME = 1000 / 60; // 60 FPS (16.66 мс на кадр)
 // Переменные игры
 int playerPos = 0; // 0 - верхняя строка, 1 - нижняя
 int score = 0;
-int gameSpeed = 30; // Чем меньше, тем быстрее (кадры между кактусами)
+int gameSpeed = 20; // Начальная скорость (меньше = быстрее)
+int minSpeed = 8;   // Минимальная скорость
 int cactusLength = 1;
 bool gameOver = false;
+bool spawnBothRows = false; // Может ли спавниться на двух рядах сразу
 
 // Массив для хранения кактусов (0-15 позиции, 0-1 строки)
 bool cacti[2][16] = {false};
 
 void setup() {
-  // Инициализация кнопок с внутренними подтягивающими резисторами
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   
-  // Инициализация дисплея
   lcd.init();
   lcd.backlight();
-  
-  // Случайное зерно для рандома
   randomSeed(analogRead(0));
   
-  // Начальное сообщение
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Cactus Dodger!");
   lcd.setCursor(0, 1);
   lcd.print("Press any button");
   
-  // Ждем нажатия любой кнопки для старта
   while (digitalRead(UP_BUTTON) && digitalRead(DOWN_BUTTON)) {
     delay(10);
   }
@@ -49,7 +45,6 @@ void setup() {
 
 void loop() {
   if (gameOver) {
-    // Экран окончания игры
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Game Over!");
@@ -57,12 +52,10 @@ void loop() {
     lcd.print("Score: ");
     lcd.print(score);
     
-    // Ждем нажатия любой кнопки для рестарта
     while (digitalRead(UP_BUTTON) && digitalRead(DOWN_BUTTON)) {
       delay(10);
     }
     
-    // Сброс игры
     resetGame();
     return;
   }
@@ -70,7 +63,6 @@ void loop() {
   static unsigned long lastFrameTime = 0;
   static int framesSinceLastCactus = 0;
   
-  // Ограничение FPS
   unsigned long currentTime = millis();
   if (currentTime - lastFrameTime < FRAME_TIME) {
     delay(1);
@@ -78,50 +70,54 @@ void loop() {
   }
   lastFrameTime = currentTime;
   
-  // Обработка ввода
   handleInput();
   
-  // Генерация кактусов
+  // Увеличиваем частоту спавна
   if (++framesSinceLastCactus >= gameSpeed) {
     generateCactus();
     framesSinceLastCactus = 0;
   }
   
-  // Движение кактусов
   moveCacti();
-  
-  // Проверка столкновений
   checkCollisions();
-  
-  // Отрисовка
   drawGame();
 }
 
 void handleInput() {
-  // Кнопка вверх (перемещение на верхнюю строку)
   if (!digitalRead(UP_BUTTON)) {
     playerPos = 0;
-    delay(50); // Простой дебаунс
+    delay(50);
   }
   
-  // Кнопка вниз (перемещение на нижнюю строку)
   if (!digitalRead(DOWN_BUTTON)) {
     playerPos = 1;
-    delay(50); // Простой дебаунс
+    delay(50);
   }
 }
 
 void generateCactus() {
-  // Случайно решаем, генерировать ли кактус (50% шанс)
-  if (random(2) == 0) return;
+  // 70% шанс спавна кактуса (вместо 50%)
+  if (random(10) < 3) return;
   
-  // Выбираем случайную длину кактуса (1-3)
   cactusLength = random(1, 4);
   
-  // Выбираем случайную строку (0 или 1)
-  int row = random(2);
+  // С 30% шансом спавним на обоих рядах (если включено)
+  bool spawnOnBoth = spawnBothRows && (random(10) < 3);
   
-  // Убедимся, что есть место для кактуса
+  // Спавн на первом ряду
+  if (!spawnOnBoth || random(2) == 0) {
+    int row1 = random(2);
+    spawnCactusOnRow(row1);
+  }
+  
+  // Спавн на втором ряду (если спавним на обоих)
+  if (spawnOnBoth) {
+    int row2 = random(2);
+    spawnCactusOnRow(row2);
+  }
+}
+
+void spawnCactusOnRow(int row) {
   bool spaceAvailable = true;
   for (int i = 15; i > 15 - cactusLength; i--) {
     if (i < 0 || cacti[row][i]) {
@@ -130,7 +126,6 @@ void generateCactus() {
     }
   }
   
-  // Если место есть, создаем кактус
   if (spaceAvailable) {
     for (int i = 15; i > 15 - cactusLength; i--) {
       if (i >= 0) {
@@ -138,15 +133,9 @@ void generateCactus() {
       }
     }
   }
-  
-  // Увеличиваем сложность
-  if (score % 5 == 0 && gameSpeed > 10) {
-    gameSpeed--;
-  }
 }
 
 void moveCacti() {
-  // Перемещаем все кактусы на один шаг влево
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 15; col++) {
       cacti[row][col] = cacti[row][col+1];
@@ -156,15 +145,19 @@ void moveCacti() {
 }
 
 void checkCollisions() {
-  // Проверяем столкновение игрока с кактусом в его строке
   if (cacti[playerPos][0]) {
     gameOver = true;
   }
   
-  // Увеличиваем счет, если кактус прошел мимо
   for (int row = 0; row < 2; row++) {
     if (cacti[row][0] && row != playerPos) {
       score++;
+      // Включаем спавн на двух рядах после 10 очков
+      if (score == 10) spawnBothRows = true;
+      // Увеличиваем сложность
+      if (score % 5 == 0 && gameSpeed > minSpeed) {
+        gameSpeed--;
+      }
     }
   }
 }
@@ -172,11 +165,9 @@ void checkCollisions() {
 void drawGame() {
   lcd.clear();
   
-  // Рисуем игрока
   lcd.setCursor(2, playerPos);
   lcd.print(PLAYER_CHAR);
   
-  // Рисуем кактусы
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
       if (cacti[row][col]) {
@@ -186,19 +177,17 @@ void drawGame() {
     }
   }
   
-  // Рисуем счет
   lcd.setCursor(12, 0);
   lcd.print(score);
 }
 
 void resetGame() {
-  // Сброс всех переменных игры
   playerPos = 0;
   score = 0;
-  gameSpeed = 30;
+  gameSpeed = 20;
   gameOver = false;
+  spawnBothRows = false;
   
-  // Очистка массива кактусов
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
       cacti[row][col] = false;
