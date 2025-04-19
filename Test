@@ -17,7 +17,8 @@ int gameSpeed = 20; // Начальная скорость (меньше = бы�
 int minSpeed = 8;   // Минимальная скорость
 int cactusLength = 1;
 bool gameOver = false;
-bool spawnBothRows = false; // Может ли спавниться на двух рядах сразу
+unsigned long lastMoveTime = 0;
+const long moveDelay = 300; // Задержка между переключениями рядов
 
 // Массив для хранения кактусов (0-15 позиции, 0-1 строки)
 bool cacti[2][16] = {false};
@@ -72,7 +73,6 @@ void loop() {
   
   handleInput();
   
-  // Увеличиваем частоту спавна
   if (++framesSinceLastCactus >= gameSpeed) {
     generateCactus();
     framesSinceLastCactus = 0;
@@ -84,37 +84,27 @@ void loop() {
 }
 
 void handleInput() {
-  if (!digitalRead(UP_BUTTON)) {
+  unsigned long currentTime = millis();
+  
+  if (!digitalRead(UP_BUTTON) && currentTime - lastMoveTime > moveDelay) {
     playerPos = 0;
-    delay(50);
+    lastMoveTime = currentTime;
   }
   
-  if (!digitalRead(DOWN_BUTTON)) {
+  if (!digitalRead(DOWN_BUTTON) && currentTime - lastMoveTime > moveDelay) {
     playerPos = 1;
-    delay(50);
+    lastMoveTime = currentTime;
   }
 }
 
 void generateCactus() {
-  // 70% шанс спавна кактуса (вместо 50%)
-  if (random(10) < 3) return;
+  // 80% шанс спавна кактуса
+  if (random(10) < 2) return;
   
   cactusLength = random(1, 4);
   
-  // С 30% шансом спавним на обоих рядах (если включено)
-  bool spawnOnBoth = spawnBothRows && (random(10) < 3);
-  
-  // Спавн на первом ряду
-  if (!spawnOnBoth || random(2) == 0) {
-    int row1 = random(2);
-    spawnCactusOnRow(row1);
-  }
-  
-  // Спавн на втором ряду (если спавним на обоих)
-  if (spawnOnBoth) {
-    int row2 = random(2);
-    spawnCactusOnRow(row2);
-  }
+  // Спавним только в ряду, где находится игрок
+  spawnCactusOnRow(playerPos);
 }
 
 void spawnCactusOnRow(int row) {
@@ -149,25 +139,23 @@ void checkCollisions() {
     gameOver = true;
   }
   
-  for (int row = 0; row < 2; row++) {
-    if (cacti[row][0] && row != playerPos) {
-      score++;
-      // Включаем спавн на двух рядах после 10 очков
-      if (score == 10) spawnBothRows = true;
-      // Увеличиваем сложность
-      if (score % 5 == 0 && gameSpeed > minSpeed) {
-        gameSpeed--;
-      }
-    }
+  // Увеличиваем счет за каждый кадр выживания
+  score++;
+  
+  // Увеличиваем сложность
+  if (score % 100 == 0 && gameSpeed > minSpeed) {
+    gameSpeed--;
   }
 }
 
 void drawGame() {
   lcd.clear();
   
+  // Рисуем игрока
   lcd.setCursor(2, playerPos);
   lcd.print(PLAYER_CHAR);
   
+  // Рисуем кактусы
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
       if (cacti[row][col]) {
@@ -177,6 +165,7 @@ void drawGame() {
     }
   }
   
+  // Рисуем счет
   lcd.setCursor(12, 0);
   lcd.print(score);
 }
@@ -186,7 +175,7 @@ void resetGame() {
   score = 0;
   gameSpeed = 20;
   gameOver = false;
-  spawnBothRows = false;
+  lastMoveTime = 0;
   
   for (int row = 0; row < 2; row++) {
     for (int col = 0; col < 16; col++) {
